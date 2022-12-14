@@ -12,12 +12,12 @@ use Quran;
 use Pod::Usage;
 use Getopt::Long;
 
-=cut
-my ($sura, $ayah, $width, $output, $help) = (undef, undef, undef, 'images/ayahs', 0);
+my ($start_ayah, $end_ayah, $display_adjacent, $width, $output, $help) = (1001, 1007, 0, 1024, 'images', 0);
 
 GetOptions(
-	'sura:i'  => \$sura,
-	'ayah:i'  => \$ayah,
+	'start_ayah:i' => \$start_ayah,
+	'end_ayah:i' => \$end_ayah,
+	'display_adjacent:i' => \$display_adjacent,
 	'width:i'  => \$width,
 	'output:s' => \$output,
 	'help|?'   => \$help,
@@ -25,34 +25,15 @@ GetOptions(
 
 $output = "$FindBin::Bin/../$output";
 
+# my @pages = eval $pages;
 my $quran = new Quran;
 
 $quran->image->ayah->generate(
-	sura   => $sura,
-	ayah   => $ayah,
 	width  => $width,
-	output => $output
-);
-
-=cut
-my ($pages, $width, $output, $help) = ('1..604', 1024, 'images', 0);
-
-GetOptions(
-	'pages:s'  => \$pages,
-	'width:i'  => \$width,
-	'output:s' => \$output,
-	'help|?'   => \$help,
-) or pod2usage(1); pod2usage(1) if $help;
-
-$output = "$FindBin::Bin/../$output";
-
-my @pages = eval $pages;
-my $quran = new Quran;
-
-$quran->image->page->generate(
-	pages  => [@pages],
-	width  => $width,
-	output => $output
+	output => $output,
+	start_ayah => $start_ayah,
+	end_ayah => $end_ayah,
+	display_adjacent => $display_adjacent
 );
 
 __END__

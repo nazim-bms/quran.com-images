@@ -2,6 +2,8 @@ version: '3'
 services:
   mysql:
     image: mysql:5.7
+    ports:
+      - "3306:3306"
     environment:
       - MYSQL_DATABASE=nextgen
       - MYSQL_USER=nextgen
@@ -9,12 +11,22 @@ services:
       - MYSQL_ROOT_PASSWORD=nextgen
     volumes:
       - mysqldata:/var/lib/mysql
-      - ./sql:/docker-entrypoint-initdb.d
+      - ./sql/mysql-init-data:/docker-entrypoint-initdb.d
   gen:
     build: .
     depends_on:
       - mysql
     volumes:
       - ./output:/app/output
+
+  # bottle:
+  #   build: ./bottle-fileserver
+  #   depends_on:
+  #     - gen
+  #   volumes:
+  #     - ./output:/app/files
+  #   ports:
+  #     - "80:8080"
+
 volumes:
   mysqldata:

@@ -1,4 +1,6 @@
-package Quran::Image::Ayah;
+package Quran::Image::AyahPage;
+
+# TODO: REVIEW THIS FILE - Have not run/tested. File is as created
 
 use strict;
 use warnings;
@@ -13,45 +15,43 @@ sub generate {
 	my %opts = @_;
 
 	$self->{_start_ayah} = $opts{start_ayah},
-	$self->{_display_adjacent} = $opts{display_adjacent},
 	$self->{_end_ayah} = $opts{end_ayah},
-	# $self->{_pages}   = $opts{page}   || $opts{pages} || [1..604],
+	$self->{_pages}   = $opts{page}   || $opts{pages} || [1..604],
 	$self->{_width}   = $opts{width}  || 1024,
 	$self->{_output}  = $opts{output} || Quran::ROOT_DIR .'/images/pages/'. $self->{_width} .'/',
 	$self->{_gd_text} = new GD::Text or die GD::Text::error;
+
+	$self->{ayah_range_details} = $self->db->get_ayah_range_details($self->{_start_ayah}, $self->{_end_ayah});
+
+	print $self->{ayah_range_details}{start_ayah} . "\n";
+	$self->{_pages} = [$self->{ayah_range_details}{start_page}..$self->{ayah_range_details}{end_page}];
 
 	if ($self->{_start_ayah} > $self->{_end_ayah}) {
 		print "Incorrect Input!";
 		return;
 	}
 
-	print "Getting Ayah range display details ... \n";
-
-	$self->{ayah_range_details} = $self->db->get_ayah_range_details($self->{_start_ayah}, $self->{_end_ayah});
-
-    # $log->info( Dumper $self->{ayah_range_details} );
-
 	my $output  = $self->{_output};
 	my $width = $self->{_width};
 
 	# reset the bounding box table before re-running
 	$self->db->reset_bounding_box_table();
+	if (ref($self->{_pages}) eq 'ARRAY') {
+		for my $page (reverse @{ $self->{_pages} }) {
+			if ($page >= 1 and $page <= 604) {
+				my $image = $self->create($page, $width);
+				$self->image->write($output, $page, $image);
+			}
+		}
+	}
+	elsif ($self->{_pages} =~ /^[\d]+$/) {
+		my $page = $self->{_pages};
+		if ($page >= 1 and $page <= 604) {
+			my $image = $self->create($page, $width);
+			$self->image->write($output, $page, $image);
+		}
+	}
 
-	my $page = {};
-
-	print "Creating Page ... \n";
-
-    my $image = $self->create($page);
-
-	my $file_name = $self->{_start_ayah} . "-" . $self->{_end_ayah};
-
-	# return;
-	print "Writing to file ... " . $output . "/" . $file_name . ".png \n";
-
-    # $self->image->write($output, $file_name , $image);
-    $self->image->write($output, "test" , $image);
-
-	print "Done! \n";
 	return $self;
 }
 
@@ -59,30 +59,23 @@ sub create {
 	my ($self, $page) = @_;
 
 	$page = {
-		number => 0
+		number => $page
 	};
 
-	print "Setting Font ... \n";
+	print "Page: ". $page->{number} ."\n";
 
 	my $fontfactor = 21;    # 21 is the default
 	my $fontdelta = 1; #(21 - abs(21 - $fontfactor)) / 21;
 
 	# page 270 font is slightly larger so it goes off the page
-	# if ($page->{number} == 270){
-	# 	$fontfactor = 22.5;
-	# }
+	if ($page->{number} == 270){
+		$fontfactor = 22.5;
+	}
 
 	$page->{width}   = $self->{_width};
-	$page->{regular_15_line_page_height}  = $self->{_width} * Quran::Image::PHI * $fontdelta;
-
+	$page->{height}  = $self->{_width} * Quran::Image::PHI * $fontdelta;
 	$page->{ptsize}  = int($self->{_width} / $fontfactor);
 	$page->{margin_top} = $page->{ptsize} / 2;
-
-	$page->{line_height} = ($page->{regular_15_line_page_height} - ($page->{margin_top} * 2)) / 15;
-
-	$page->{height} = ($page->{margin_top} * 2) + $page->{line_height} * $self->{ayah_range_details}{display_lines};
-	# $page->{height} = $page->{regular_15_line_page_height};
-
 	$page->{coord_y} = $page->{margin_top};
 	$page->{font}    = Quran::Image::FONT_DEFAULT; # TODO: determine font size algorithmically and trim page height to fit or force fit
 	$page->{image} = GD::Image->new($page->{width}, $page->{height});
@@ -101,25 +94,13 @@ sub create {
 	$page->{image}->interlaced('true');
 	$page->{image}->setAntiAliased( $page->{color}->{black} );
 	$page->{image}->transparent(    $page->{color}->{white} );
-
-	print "Fetching glyph details ... \n";
-	$page->{lines} = $self->db->get_ayah_lines($self->{ayah_range_details}{start_page_line}, $self->{ayah_range_details}{end_page_line}, $self->{ayah_range_details}{start_ayah});
-
-	# $log->info( Dumper $page->{lines});
-	# return;
+	$page->{lines} = $self->db->get_page_lines($page->{number});
 
 	for (my $i = 0; $i < @{ $page->{lines} }; $i++) {
 		my $line = $page->{lines}->[$i];
 
 		$line->{page} = $page;
 
-		if ($line->{page_number} == 270){
-			$fontfactor = 22.5;
-		} else {
-			$fontfactor = 21;
-		}
-
-		$line->{ptsize}  = int($self->{_width} / $fontfactor);
 
 
 		$line->{box} = $self->_get_box($line);
@@ -131,16 +112,15 @@ sub create {
 		$line->{previous_w} = 0;
 		$page->{coord_x} = 0;
 
-		$line->{color} = $page->{color}->{white};
+		$line->{color} = $page->{color}->{darkgrey};
 
 		$line->{selected_line_type} = 'void';
-		if ($self->{ayah_range_details}{start_page_line} < ($line->{page_number} * 1000 + $line->{line_number}) and
-			$self->{ayah_range_details}{end_page_line} > ($line->{page_number} * 1000 + $line->{line_number})) {
+		if ($self->{ayah_range_details}{start_page_line} < ($page->{number} * 1000 + $line->{number}) and
+			$self->{ayah_range_details}{end_page_line} > ($page->{number} * 1000 + $line->{number})) {
 			$line->{color} = $page->{color}->{plainwhite};
 			$line->{selected_line_type} = 'inside';
-		} elsif (($line->{type} ne 'sura') &&
-			(($self->{ayah_range_details}{start_page_line} == ($line->{page_number} * 1000 + $line->{line_number})) or
-				($self->{ayah_range_details}{end_page_line} == ($line->{page_number} * 1000 + $line->{line_number})))) {
+		} elsif (($self->{ayah_range_details}{start_page_line} == ($page->{number} * 1000 + $line->{number})) or
+				($self->{ayah_range_details}{end_page_line} == ($page->{number} * 1000 + $line->{number}))) {
 			$line->{selected_line_type} = 'start_or_end';
 		} elsif ($line->{type} eq 'sura') {
 			if ($i + 2 <= @{ $page->{lines}}) {
@@ -173,9 +153,6 @@ sub create {
 				}
 			}
 		}
-
-		# print $line->{page_number} . ":" . $line->{line_number} . ":" . $line->{type} . "\n";
-
 
 		for (my $j = 0; $j < @{ $line->{glyphs} }; $j++) {
 			my $glyph = $line->{glyphs}->[$j];
@@ -221,13 +198,9 @@ sub create {
 				$glyph->{use_coord_y} = 1;
 				$glyph->{box}->{coord_y} = $page->{coord_y};
 				$glyph->{box}->{coord_y} += $line->{box}->{height} / 7;
-				if ($self->{ayah_range_details}{start_page_line} eq ($line->{page_number}*1000+$line->{line_number})) {
-					$glyph->{selected} = 1;
-				}
 			}
 
 			if ($line->{selected_line_type} eq 'start_or_end') {
-				$glyph->{selected} = 0;
 				if ($glyph->{type_id} eq '1') {
 					my $sa = $glyph->{sura_number} * 1000 + $glyph->{ayah_number};
 					if (($sa >= $self->{ayah_range_details}{start_ayah})
@@ -237,27 +210,28 @@ sub create {
 						
 					}
 				} elsif ($glyph->{type_id} eq '2' or $glyph->{type_id} eq '3') {
-					print $i . ":" . $j . ":" . $glyph->{position} . ":" . @{$line->{glyphs}} . "\n";
-					if ($j + 1 < @{ $line->{glyphs}}) {
+					if ($j + 1 <= @{ $line->{glyphs}}) {
 						my $next_glyph = $line->{glyphs}->[$j+1];
 						if ($next_glyph->{type_id} eq '1') {
 							my $next_glyph_sa = $next_glyph->{sura_number} * 1000 + $next_glyph->{ayah_number};
 							if (($next_glyph_sa >= $self->{ayah_range_details}{start_ayah})
 								and ($next_glyph_sa <= $self->{ayah_range_details}{end_ayah})) {
 								$glyph->{color} = $page->{color}->{plainwhite};
-								$glyph->{selected} = 1;
 							}
 						}
-					} elsif ($i != 0) {
-						$glyph->{color} = $page->{color}->{plainwhite};
 					}
 				}
 			}
-			if ($self->{_display_adjacent} == 1 or $line->{selected_line_type} eq 'inside' or $glyph->{selected} == 1) {
-				$glyph->{box} = $self->_set_box($glyph);
-			}
+
+			$glyph->{box} = $self->_set_box($glyph);
 
 			$line->{box} = $self->_get_max_box($glyph->{box}, $line->{box});
+			# print "Page: ". $page->{number} .
+			# 	", L: " . $line->{number} . 
+			# 	", S: " . $glyph->{sura_number} . 
+			# 	", A: " . $glyph->{ayah_number} . 
+			# 	"\n";
+
 		}
 
 		$page->{coord_y} -= $line->{box}->{char_down};
@@ -285,6 +259,16 @@ sub _set_box {
 	my $box = $glyph->{box};
 
 	my $color = $glyph->{color}; #$page->{color}->{darkgrey};
+
+	# if ($line->{type} eq 'ayah') {
+	# 	#my $gt = $self->db->_get_glyph_type($glyph->{text}, $page->{number});
+	# 	#$color = $self->_should_color($glyph->{text}, $page->{number},
+	# 	#   $line->{type}, $gt) ?
+	# 	#	$page->{color}->{red} : $page->{color}->{black};
+	# }
+	# elsif ($line->{type} eq 'sura'){
+	# 	#$color = $page->{color}->{red};
+	# }
 
 	# begin hack
 	my ($coord_x, $coord_y) = $glyph->{use_coords} ? ($glyph->{box}->{coord_x}, $glyph->{box}->{coord_y}) : ($page->{coord_x}, $page->{coord_y});

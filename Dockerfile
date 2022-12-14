@@ -1,15 +1,17 @@
 FROM debian:jessie
 
-MAINTAINER Hossam Hammady <github@hammady.net>
+# MAINTAINER Hossam Hammady <github@hammady.net>
 
 RUN apt-get update -qq && \
-    apt-get install -y \
+    apt-key update && \
+    apt-get -y --force-yes install \
       libgd-gd2-perl libgd-text-perl \
       libdbd-mysql-perl libdbi-perl \
       libconfig-yaml-perl \
       make gcc g++ \
       unzip \
-      curl && \
+      curl \
+      && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
@@ -37,4 +39,17 @@ RUN cd /app && \
 
 RUN sed -i 's/localhost/mysql/' /app/config/database.yaml
 
-CMD /app/script/generate.pl help
+# RUN apt-get update -qq && \
+#     apt-key update && \
+#     apt-get -y --force-yes install \
+#     netcat ssh iputils-ping && \
+#     mkdir /var/run/sshd && \
+#     chmod 0755 /var/run/sshd && \
+#     useradd -p $(openssl passwd -1 a-very-secure-***-password) --create-home --shell /bin/bash --groups sudo root2user
+
+# CMD /usr/sbin/sshd -D;tail -f /dev/null;
+
+CMD tail -f /dev/null
+# ENTRYPOINT [ "/bin/bash" ]
+
+# CMD /app/script/generate.pl help
